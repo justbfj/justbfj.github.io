@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html>
+<script src="https://unpkg.com/shpjs@latest/dist/shp.js"></script>
+<head>
+	<title>Test</title>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<link rel="shortcut icon" type="image/x-icon" href="docs/images/favicon.ico">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" integrity="sha512-xodZBNTC5n17Xt2atTPuE1HxjVMSvLVW9ocqUKLsCC5CXdbqCmblAshOMAS6/keqq/sMZMZ19scR4PsZChSR7A==" crossorigin="">
+    <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js" integrity="sha512-XQoYMqMTK8LvdxXYG3nZ448hOEQiglfqkJs1NOQV44cWnUrBc8PkAOcXy20w0vlaXaVUearIOBhiXZ5V3ynxwA==" crossorigin=""></script>
+
+</head>
+
+<body>
+<div id="mapid" style="width: 1600px; height: 800px;"></div>
+
+
+
+
+
+<script>
+	var mymap = L.map('mapid').setView([20.7984, -156.3319], 11);
+	L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+	maxZoom: 19,
+	attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+	}).addTo(mymap);
+</script>
+
+
+
+<script>
+//-----------------------------------------------------------------
+// This script extract weather data from Windy.com and assess whether 
+// flight plan is feasible or not
+// Input: Flightline shapefile
+// Output: Leaflet map with feasible flightlines in blue and non-feasile ones in red
+//-----------------------------------------------------------------
+
+// Convert shapefile to geoJSON, 247 flightlines in total
+shp("FlightlineDB_Maui").then(async function(FlightLines){
+	console.log(FlightLines);
+	for(var i = 0; i < 10; i++) 
+	{
+		// Extract each flightline
+		var obj = FlightLines.features[i];
+		// Obtain start, mid and end coordinates for the flightline
+		coord = obj.geometry.coordinates;
+		var start = coord[0];
+		var end = coord[coord.length-1];
+		var mid = [(start[0]+end[0])/2.0, (start[1]+end[1])/2.0];
+		var coord_all = [start, mid, end];
+		// Obtain attitude of flightline
+		var h_F = obj.properties.Altitude;
+		// Match height with available API weather data
+		var gh = [0,1000,950,925,900,850,800,700,600,500,400,300,200,150];
+		var h_API = ClosestGH(gh,h_F);
+		
+		// Get weather data
+		var score = 0;
+		var index = 0;
+		var s = [];
+		var length = coord_all.length;
+		var flag = 0;
+		// Loop through points for each flightline, 3 points for now, start, end and mid
+		// Ignore some redundant variables, I was trying with multiple ways to make this work
+		for(var j = 0; j < length; j++)
+		{
+			console.log("Processing Line",i,"point",j);
+			flag = flag+1;	
+			// Request using this function, but avg is undefined after calling this function
+			//avg = API(coord_all[j],h_API,s,index,length,obj,flag,mycallback);
+			console.log("test average");      
+			await API(coord_all[j],h_API,s,index,length,obj,flag,mycallback).toPromise().then(function(res) {
+			console.log("test average");                
+			var avg = res;
+			console.log("test average",avg);
+            });
+			index = index + 1;
+			
+		}
+	}
+	});
+
+// This function is correct
+function ClosestGH (gh,h_F) {
+    var diff_prev = 10000000;
+	var closet = 0;
+    for (var i = 0; i < gh.length; i++) 
+	{
+		var curr = gh[i];
+		var diff_curr = Math.abs(h_F-curr);
+		if (diff_curr < diff_prev)
+		{
+			diff_prev = diff_curr;
+			closest = gh[i];	
+		}
+    };
+	if (closest == 0)
+	{
+		var h_API = "surface";
+	}
+	else
+	{
+		var h_API = closest.toString().concat('h');
+	}
+    return h_API
+}
+
+// Get weather data
+// coord_all: contain 1 pair of coordinates of a flightline
+// so I have to call this function three times, which I don't think is the best way of doing it?
+// h_API: height of flightline
+// s: a variable to store suitability score
+// length: the number is 3 for now, corresponding to start, end and mid points of a flightline
+// obj: the json for current flightline
+// I copied this request and callback from some online source so I don't quite understand them...
+API = async function(coord_all,h_API,s,index,length,obj,flag,callback)
+{
+	var result;
+	var score_temp = 0;
+	var data = JSON.stringify({"lat": coord_all[0],
+    "lon": coord_all[1],
+    "model": "gfs",
+    "parameters": ["wind", "precip", "temp", "lclouds"],
+    "levels": ["surface", h_API],
+    "key": "FB3vfHo0aJbPjvFCsACxRqwI5qf0N8OK"});
+	
+	var xhr = new XMLHttpRequest();
+	var url = "https://api.windy.com/api/point-forecast/v2";
+	xhr.open("POST", url, true);
+	xhr.setRequestHeader("Content-Type", "application/json");
+	xhr.send(data);
+	xhr.onreadystatechange = function () {
+    if (this.readyState === 4 && this.status === 200) 
+	{
+		callback(JSON.parse(this.responseText),h_API,s,index,length,obj,flag);
+		console.log("here",flag,coord_all[0],coord_all[1],obj);
+		//console.log(new Date(result.ts[0]));
+		//console.log(new Date(result.ts[1]));
+		
+	}
+	}
+	
+}
+
+// Some data manipulation to apply a math model to get suitability score
+// Two things I'm confused about；
+// 1. I don't know how to return the value back to line 71
+// 2. This function only handle one point in a flightline, but I need three points in one flightline
+//    to get one score for each flightline, and the API weather data returned are not in order
+//    should I pass the entire flightlines here to match with it or is there any way pass the score
+//    back to line 71?
+function mycallback(result,h_API,s,index,length,obj,flag) {
+   console.log(result);
+
+   // Precip, boolean, if it rains, wind speed too high, cloud coverage too thick, do not fly
+   // Score = 0, not suitable
+	var u = 'wind_u-'.concat(h_API);
+	var v = 'wind_v-'.concat(h_API);
+	var wind = Math.sqrt(result[u][1]*result[u][1]+result[v][1]*result[v][1]);
+	if (result["past3hprecip-surface"][1] == 0 || wind>5 || result["lclouds-surface"][1]>100)
+	{
+		s[index] = 0;
+		console.log("Not suitable");
+	}
+	// If not in extreme conditions, remap wind and cloud coverage data into defined intervals
+	// Wind, 0.5 one level, cloud, 10 one level
+	else
+	{
+		var score_wind = remap(10, wind, 0, 5);
+		var score_cloud = remap(10, result["lclouds-surface"][1], 0, 100);
+		
+		s[index] = (score_wind*0.7+score_cloud*0.3);
+		console.log("suitable");
+		console.log(s,s.length);
+	}
+	
+	// I was thinking the returned results were in order, so when I collect 3 scores 
+	// for start, mid and end points, I'm good to estimate for one flight, but it ends
+	// up the results are not in order
+	if (flag==length)
+	{
+		var prod = 1;
+		var sum = 0;
+		for(var i = 0; i < length; i++)
+		{
+			// Calculate product for all three scores, if equal to 0, at least one element is 0
+			// indicating extreme conditions, do not fly
+			prod = prod*s[i];
+			// Calculate sum for all three scores
+			sum = sum+s[i]
+		}
+		
+		// Calculate average of suitability scores
+		var avg = sum/length;
+		//console.log(prod,avg,s.length);
+		
+		// if not suitable, draw flight lines in red
+		if (avg < 5 || prod==0)
+		{
+			var myStyle = {
+			"color": "#FF3333",
+			"weight": 1,
+			"opacity": 0.65
+			};
+			
+			L.geoJSON(obj, {
+			style: myStyle
+			}).addTo(mymap);
+		}
+		// if suitable, draw flight lines in blue
+		else
+		{
+			var myStyle = {
+			"color": "#3733FF",
+			"weight": 1,
+			"opacity": 0.65
+			};
+			L.geoJSON(obj, {
+			style: myStyle
+			}).addTo(mymap);
+		}
+		console.log("one line done");
+	}
+}
+
+// This function is correct
+function remap(interval,data,begin,end)
+{
+	var score = 0;
+	var stepsize = (end-begin)/interval;
+	for(var i = 0; i < interval+1; i++)
+	{
+		var curr = begin;
+		
+		if ((data - begin)>stepsize)
+		{
+			begin = begin + stepsize;
+		}	
+		else
+		{
+			score = 10-i;
+			//console.log(data,i,score, begin,stepsize);
+			break;
+		}
+		if (data > end)
+		{
+			score = 0;
+		}	
+	}
+	
+	return score;
+}
+
+
+
+
+</script>
+
+
+
+
+</body>
+</html>
+
+
+
+
+
+
+
+
+
+

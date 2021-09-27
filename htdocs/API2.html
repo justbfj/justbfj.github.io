@@ -1,0 +1,584 @@
+<!DOCTYPE html>
+<html>
+<script src="https://unpkg.com/shpjs@latest/dist/shp.js"></script>
+<head>
+	<title>Test</title>
+	<meta http-equiv="refresh" content="100000" >
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<link rel="shortcut icon" type="image/x-icon" href="docs/images/favicon.ico">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" integrity="sha512-xodZBNTC5n17Xt2atTPuE1HxjVMSvLVW9ocqUKLsCC5CXdbqCmblAshOMAS6/keqq/sMZMZ19scR4PsZChSR7A==" crossorigin="">
+    <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js" integrity="sha512-XQoYMqMTK8LvdxXYG3nZ448hOEQiglfqkJs1NOQV44cWnUrBc8PkAOcXy20w0vlaXaVUearIOBhiXZ5V3ynxwA==" crossorigin=""></script>
+	<script src="leaflet.shpfile.js"></script> 
+	<script src="shp.js"></script>
+
+<style>
+
+
+html,
+body {
+  padding: 0;
+  margin: 0;
+}
+html,
+body,
+#mapid {
+  height: 100%;
+  width: 100%;
+}
+
+/*Legend specific*/
+.legend {
+  padding: 6px 8px;
+  font: 14px Arial, Helvetica, sans-serif;
+  background: white;
+  background: rgba(255, 255, 255, 0.8);
+  /*box-shadow: 0 0 15px rgba(0, 0, 0, 0.2);*/
+  /*border-radius: 5px;*/
+  line-height: 24px;
+  color: #555;
+}
+.legend h4 {
+  text-align: center;
+  font-size: 16px;
+  margin: 2px 12px 8px;
+  color: #777;
+}
+
+.legend span {
+  position: relative;
+  bottom: 3px;
+}
+
+.legend i {
+  width: 18px;
+  height: 18px;
+  float: left;
+  margin: 0 8px 0 0;
+  opacity: 0.7;
+}
+
+.legend i.icon {
+  background-size: 18px;
+  background-color: rgba(255, 255, 255, 1);
+}
+
+#Message,Button{
+  position: absolute;
+  top: 20px;
+  left: 50px;
+  padding: 10px;
+  z-index: 400;
+}
+
+
+body {
+  font-family: Arial, sans-serif;
+  line-height: 1.6;
+}
+
+#Popup {
+  background-color: rgba(245,245,245, 0.5);
+  border-radius: 6px;
+  font-size: 16px;
+  width: 270px;
+  height: 230px;
+  position: absolute;
+  border: 2px solid green;
+  padding: 20px;
+  left: 30px;
+  top: 60px;
+  margin: 20px;
+  display: none;
+}
+
+
+.button {border-radius: 6px;
+background-color: #F5F5F5;
+font-size: 20px;
+opacity: 0.8;
+  transition: 0.3s;}
+
+.button:hover {opacity: 1}
+
+.fade-in {
+  animation: fadeIn ease 2s;
+  -webkit-animation: fadeIn ease 2s;
+  -moz-animation: fadeIn ease 2s;
+  -o-animation: fadeIn ease 2s;
+  -ms-animation: fadeIn ease 2s;
+}
+@keyframes fadeIn {
+  0% {
+    opacity:0;
+  }
+  100% {
+    opacity:1;
+  }
+}
+
+@-moz-keyframes fadeIn {
+  0% {
+    opacity:0;
+  }
+  100% {
+    opacity:1;
+  }
+}
+
+@-webkit-keyframes fadeIn {
+  0% {
+    opacity:0;
+  }
+  100% {
+    opacity:1;
+  }
+}
+
+@-o-keyframes fadeIn {
+  0% {
+    opacity:0;
+  }
+  100% {
+    opacity:1;
+  }
+}
+
+@-ms-keyframes fadeIn {
+  0% {
+    opacity:0;
+  }
+  100% {
+    opacity:1;
+}
+
+
+
+
+
+
+</style>
+
+
+
+
+
+</head>
+
+<body>
+
+
+<div id="mapid"></div>
+<div class="myDiv" id="Message">
+	<form action='#' onsubmit="return false;">
+		<input class="button" type='file' id ='fileinput'>
+		<input class="button" type='button' id='Button' value='Process' onclick='loadFile();'>
+	</form> 
+	<!--
+  <button class="button" onclick="myFunction()" id="Button">Process</button>-->
+  <p class="fade-in" id="Popup"></p>
+</div>
+</div>
+
+
+<script>
+	var mymap = L.map('mapid').setView([20.7984, -156.3319], 11);
+	L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+	maxZoom: 19,
+	attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+	}).addTo(mymap);
+	
+	
+/*Legend specific*/
+var legend = L.control({ position: "bottomleft" });
+var file;
+legend.onAdd = function(map) {
+  var div = L.DomUtil.create("div", "legend");
+  div.innerHTML += "<h4>Legend</h4>";
+  div.innerHTML += '<i style="background: #3733FF"></i><span>Suitable</span><br>';
+  div.innerHTML += '<i style="background: #FF3333"></i><span>Unsuitable</span><br>';
+
+  
+
+  return div;
+};
+
+legend.addTo(mymap);
+
+
+function loadFile() {
+
+    input = document.getElementById('fileinput');
+    if (!input.files[0]) {
+        bodyAppend("p", "Please select a file before clicking 'Load'");
+    }
+    else {
+        file = input.files[0];
+		
+		var filename = file.name.split('.')[0];
+		console.log(filename);
+		myFunction(filename);
+        fr = new FileReader();
+        fr.onload = receiveBinary;
+        fr.readAsArrayBuffer(file);
+    }
+    function receiveBinary() {
+        result = fr.result;
+        shpfile = new L.Shapefile(result);
+		console.log(file);
+        //shpfile.addTo(mymap);
+		
+    }
+}
+console.log(file);
+
+
+
+//-----------------------------------------------------------------
+// This script extract weather data from Windy.com and assess whether 
+// flight plan is feasible or not
+// Input: Flightline shapefile
+// Output: Leaflet map with feasible flightlines in blue and non-feasile ones in red
+//-----------------------------------------------------------------
+
+// Convert shapefile to geoJSON, 247 flightlines in total
+//var myUploadedFile = document.getElementById("myFile").files[0];
+//console.log(file);
+function myFunction(file) {
+shp(file).then(async function(FlightLines)
+{
+	console.log(FlightLines);
+	var length_test = 3;
+	// Nested array
+	// 7 days
+	var rows = 7;
+	// Number of flightlines
+	var cols = length_test;
+	//var PM = Array(rows).fill(0).map(x => Array(cols).fill(0));
+	
+	var PM = [];
+	var count_now = 0;
+	var day = [];
+	var month = [];
+	var monthNames = ["January", "February", "March", "April", "May","June","July", "August", "September", "October", "November","December"];
+	// Percentage of available flightlines
+	var sum = 0;
+	var summary = 0;
+	for(var i = 0; i < length_test; i++) 
+	{
+		// Extract each flightline
+		var obj = FlightLines.features[i];
+		// Obtain start, mid and end coordinates for the flightline
+		coord = obj.geometry.coordinates;
+		var start = coord[0];
+		var end = coord[coord.length-1];
+		var mid = [(start[0]+end[0])/2.0, (start[1]+end[1])/2.0];
+		var coord_all = [start, mid, end];
+		
+		// Get weather data
+		var score = 0;
+		var index = 0;
+		var s = [];
+		var length = coord_all.length;
+		var oneLine = [];
+		var temp_point = Array.from(Array(3), () => new Array(7))
+		// Loop through points for each flightline, 3 points for now, start, end and mid
+		// Ignore some redundant variables, I was trying with multiple ways to make this work
+		for(var j = 0; j < length; j++)
+		{
+			console.log("Processing Line",i,"point",j, "coordinates", coord_all[j]);				
+			// Request using this function, but avg is undefined after calling this function
+			await API(coord_all[j],oneLine,index,length,obj).then((result) => 
+			{
+				console.log("completed");
+				console.log("Returned weather data", result);
+				
+				// Precip, boolean, if it rains, wind speed too high, cloud coverage too thick, do not fly
+				// Score = 0, not suitable
+				
+				// Next hour, check this
+				//console.log(result["hourly"][5].pop);
+				var precip = result["hourly"][1].pop;
+				var wind = result["hourly"][1].wind_speed;
+				var cloud = result["hourly"][1].clouds;
+				if (precip>0.5 || wind>8 || cloud>80)
+				{
+					oneLine[j] = 0;
+					console.log("Not suitable");
+				}
+				// If not in extreme conditions, remap wind and cloud coverage data into defined intervals
+				// Wind, 0.5 one level, cloud, 10 one level
+				else
+				{
+					var score_wind = remap(10, wind, 0, 5);
+					var score_cloud = remap(10, cloud, 0, 100);
+					oneLine[j] = (score_wind*0.7+score_cloud*0.3);
+					console.log(wind,score_wind,cloud,score_cloud);
+					console.log("suitable");
+				}
+
+				// Project Management, 8 days
+				for(var d = 1; d < 8; d++)
+				{
+					
+					var d_precip = result["daily"][d].pop;
+					var d_wind = result["daily"][d].wind_speed;
+					var d_cloud = result["daily"][d].clouds;
+					
+					if (d_precip>0.3 || d_wind>6.5 || d_cloud>50)
+					{
+						console.log(d_precip,d_wind,d_cloud);
+						temp_point[j][d-1]=0;
+						//console.log("not suitable",temp_point);
+					}
+
+					else
+					{
+						//console.log(d_precip,d_wind,d_cloud);
+						var daily_wind = remap(10, wind, 0, 5);
+						var daily_cloud = remap(10, cloud, 0, 100);
+						var score_daily = (daily_wind*0.7+daily_cloud*0.3);
+						if (score_daily>5)
+						{
+							temp_point[j][d-1]=1;
+							//console.log("suitable",temp_point);
+						}	
+						else
+						{
+							temp_point[j][d-1]=0;
+						}
+					}
+					
+					// Date
+					var timestamp = result["daily"][d].dt;
+					var date = new Date(timestamp * 1000);
+					month[d-1] = monthNames[date.getMonth()];
+					day[d-1] = date.getDate();
+					console.log(month, day);	
+				}
+				
+				console.log(temp_point)
+				// Summary
+				for(var k = 0; k < 7; k++)
+				{
+					if (temp_point[0][k]==1 && temp_point[1][k]==1 && temp_point[2][k]==1)
+					{
+						// On which day first available
+						PM[i] = k+1;
+						break;
+					}
+					else
+					{
+						PM[i] = 0;
+					}
+				}
+				console.log("Final",PM);
+				
+				
+		
+				
+			});
+		console.log("Scores",oneLine);
+				
+		}
+		
+		// If all point data are available
+		if (j==length)
+		{
+			//console.log("test");
+			var prod = 1;
+			var sum = 0;
+			for(var k = 0; k < length; k++)
+			{
+				// Calculate product for all three scores, if equal to 0, at least one element is 0
+				// indicating extreme conditions, do not fly
+				prod = prod*oneLine[k];
+				// Calculate sum for all three scores
+				sum = sum+oneLine[k]
+			}
+				
+			// Calculate average of suitability scores
+			var avg = sum/length;
+			console.log("Numerical scores", prod,avg);
+				
+			// if not suitable, draw flight lines in red
+			if (avg < 5 || prod==0)
+			{
+				var myStyle = {
+				"color": "#FF3333",
+				"weight": 1,
+				"opacity": 0.65
+				};
+					
+				L.geoJSON(obj, {
+				style: myStyle
+				}).addTo(mymap);
+			}
+			// if suitable, draw flight lines in blue
+			else
+			{
+				var myStyle = {
+				"color": "#3733FF",
+				"weight": 1,
+				"opacity": 0.65
+				};
+				L.geoJSON(obj, {
+				style: myStyle
+				}).addTo(mymap);
+				count_now = count_now + 1;
+			}
+			
+		}	
+		console.log("one line done");
+
+	}
+	
+	var count = Array(7).fill(0);
+	//PM[0] = 0;
+	//PM[1] = 0;
+	//PM[2] = 0;
+	var percentage = [];
+	var percentage_now = 100*count_now/length_test;;
+	var disp = "Flightlines available now: " + percentage_now + "%\r\n" + "Flightlines available in next 7 days: \r\n";
+	for(var m = 0; m < length_test; m++)
+	{
+	
+		for(var d = 1; d < 8; d++)
+		{
+			//console.log(count[d-1]);
+			//console.log(PM[m],d,count);
+
+			if (PM[m]==d)
+			{
+				//console.log(count[d-1]);
+				count[d-1] = count[d-1] + 1;	
+				//console.log("test1",m,PM[m],d,count);
+			}
+			if(PM[m]!=d && d!=1)
+			{
+				count[d-1] = count[d-2];	
+				//console.log("test2",m,PM[m],d,count);
+			}
+			//if (count[d-2]==0 && d!=1)
+			//{
+				//console.log(count,d);
+				//continue;
+			//}			
+			console.log("PM",PM);
+			console.log(count);
+			percentage[d-1] = 100*count[d-1]/length_test;
+			console.log(percentage);
+
+			if(m==length_test-1)
+			{
+
+				disp = disp + month[d-1] + " " + day[d-1] + ": " + percentage[d-1] + "%\r\n";
+				//disp = disp + "Day " + d + ": " + percentage[d-1] + "%\r\n";
+				console.log(disp);
+			}
+			
+		}
+
+	}
+
+	console.log(disp);
+	console.log(percentage);
+	console.log("All lines done");
+	var str = "";
+	str = disp.replace(/\n/g, "<br />");
+
+	var x = document.getElementById("Popup")
+	x.innerHTML = str;
+	console.log(x.style.display);
+    x.style.display = "block";
+	
+	
+	
+});
+
+}
+
+
+
+// Get weather data
+// coord_all: contain 1 pair of coordinates of a flightline
+// h_API: height of flightline
+// s: a variable to store suitability score
+// length: the number is 3 for now, corresponding to start, end and mid points of a flightline
+// obj: the json for current flightline
+async function API (coord_all,s,index,length,obj)
+{
+	
+	var result;
+	var score_temp = 0;
+	var lon = coord_all[0];
+	var lat = coord_all[1];
+	var part = "hourly&daily";
+	var API_key = '6c16d443365de5b88e4b4630d15c74f5';
+	var xhr = new XMLHttpRequest();
+	// Daily??
+	var url = 'https://api.openweathermap.org/data/2.5/onecall?lat='+encodeURIComponent(lat)+'&lon='+encodeURIComponent(lon)+'&exclude='+encodeURIComponent(part)+'&appid=6c16d443365de5b88e4b4630d15c74f5';
+	var result;
+	xhr.onreadystatechange = function () {
+		if (this.readyState === 4 && this.status === 200) 
+		{
+			result = JSON.parse(this.responseText);
+			// callback(result,h_API,s,index,length,obj,flag);			
+		}
+	}
+	xhr.open("GET", url, false);
+	// xhr.setRequestHeader("Content-Type", "application/json");
+	xhr.send();
+	return result;
+	
+}
+
+
+// This function is correct
+function remap(interval,data,begin,end)
+{
+	var score = 0;
+	var stepsize = (end-begin)/interval;
+	for(var i = 0; i < interval+1; i++)
+	{
+		var curr = begin;
+		
+		if ((data - begin)>stepsize)
+		{
+			begin = begin + stepsize;
+		}	
+		else
+		{
+			score = 10-i;
+			//console.log(data,i,score, begin,stepsize);
+			break;
+		}
+		if (data > end)
+		{
+			score = 0;
+		}	
+	}
+	
+	return score;
+}
+
+
+
+
+</script>
+
+
+
+
+</body>
+</html>
+
+
+
+
+
+
+
+
+
+
